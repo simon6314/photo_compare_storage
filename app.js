@@ -162,8 +162,12 @@ document.addEventListener("DOMContentLoaded", () => {
       text = `中等 (${similarityPercent}%) - 稍有視角偏移/亮度差`;
     } else if (currentThreshold <= 12) {
       text = `寬鬆 (${similarityPercent}%) - 相同場景或物體`;
-    } else {
+    } else if (currentThreshold <= 20) {
       text = `超寬鬆 (${similarityPercent}%) - 構圖相似`;
+    } else if (currentThreshold <= 40) {
+      text = `極度寬鬆 (${similarityPercent}%) - 僅有微弱關聯`;
+    } else {
+      text = `任意比對 (${similarityPercent}%) - 幾乎無關聯的相片皆會分在同一組`;
     }
     
     thresholdVal.textContent = text;

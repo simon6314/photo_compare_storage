@@ -715,7 +715,7 @@ document.addEventListener("DOMContentLoaded", () => {
           // Download and load into image object
           const url = await loadImageForCanvas(file.id, file.thumbnailUrl);
           const img = await loadImageObject(url);
-          const { hash, avgRGB } = await computeDHashAndColor(img);
+          const { hash, avgRGB } = await computePHashAndColor(img);
           
           imagesWithHashes.push({
             id: file.id,
@@ -758,41 +758,45 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /**
-   * Computes Difference Hash (dHash) and Average RGB for an Image
+   * Computes Perceptual Hash (pHash) via Discrete Cosine Transform (DCT) and Average RGB
+   * Analyzes spatial frequency to represent overall COMPOSITION (構圖)
    */
-  function computeDHashAndColor(img) {
+  function computePHashAndColor(img) {
     return new Promise((resolve) => {
-      const width = 9;
-      const height = 8;
+      const width = 32;
+      const height = 32;
       
       const canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext("2d");
       
-      // Draw image onto small size canvas (automatically shrinks and averages pixels)
       ctx.drawImage(img, 0, 0, width, height);
       
       const imgData = ctx.getImageData(0, 0, width, height);
       const data = imgData.data;
       
-      // Calculate Average RGB
+      // Calculate Average RGB & Grayscale matrix
       let sumR = 0, sumG = 0, sumB = 0;
       const pixelCount = width * height;
+      const matrix = [];
       
-      // Convert to Grayscale
-      const gray = new Uint8Array(pixelCount);
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        
-        sumR += r;
-        sumG += g;
-        sumB += b;
-        
-        // Standard luminance weights
-        gray[i / 4] = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+      for (let y = 0; y < height; y++) {
+        const row = [];
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+          
+          sumR += r;
+          sumG += g;
+          sumB += b;
+          
+          // Grayscale conversion
+          row.push(0.299 * r + 0.587 * g + 0.114 * b);
+        }
+        matrix.push(row);
       }
       
       const avgRGB = {
@@ -801,13 +805,53 @@ document.addEventListener("DOMContentLoaded", () => {
         b: Math.round(sumB / pixelCount)
       };
       
-      // Compare horizontal adjacent pixels
+      // 2D Discrete Cosine Transform (DCT) - Top-left 8x8 coefficients
+      const dctRows = 8;
+      const dctCols = 8;
+      const dctCoeffs = [];
+      
+      for (let u = 0; u < dctRows; u++) {
+        const row = [];
+        for (let v = 0; v < dctCols; v++) {
+          let sum = 0;
+          for (let x = 0; x < width; x++) {
+            for (let y = 0; y < height; y++) {
+              sum += matrix[y][x] * 
+                     Math.cos(((2 * x + 1) * u * Math.PI) / 64) * 
+                     Math.cos(((2 * y + 1) * v * Math.PI) / 64);
+            }
+          }
+          
+          const cu = (u === 0) ? (1 / Math.sqrt(2)) : 1;
+          const cv = (v === 0) ? (1 / Math.sqrt(2)) : 1;
+          sum = (1 / 4) * cu * cv * sum;
+          
+          row.push(sum);
+        }
+        dctCoeffs.push(row);
+      }
+      
+      // Find Median of DCT coefficients (excluding DC component [0,0])
+      const flat = [];
+      for (let u = 0; u < dctRows; u++) {
+        for (let v = 0; v < dctCols; v++) {
+          if (u === 0 && v === 0) continue; // Exclude DC
+          flat.push(dctCoeffs[u][v]);
+        }
+      }
+      
+      const sorted = [...flat].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+      
+      // Generate 64-bit Perceptual Hash
       let hash = "";
-      for (let row = 0; row < height; row++) {
-        for (let col = 0; col < width - 1; col++) {
-          const leftPixel = gray[row * width + col];
-          const rightPixel = gray[row * width + col + 1];
-          hash += (leftPixel > rightPixel) ? "1" : "0";
+      for (let u = 0; u < dctRows; u++) {
+        for (let v = 0; v < dctCols; v++) {
+          if (u === 0 && v === 0) {
+            hash += "0";
+            continue;
+          }
+          hash += (dctCoeffs[u][v] > median) ? "1" : "0";
         }
       }
       

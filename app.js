@@ -41,6 +41,9 @@ document.addEventListener("DOMContentLoaded", () => {
   let uploadQueue = [];
   let uploadProcessedCount = 0;
   let uploadTotalCount = 0;
+  
+  let calculatedHashes = []; // 圖片指紋特徵快取
+  let currentThreshold = 8;  // 比對門檻 (預設中等 88% 相似)
 
   // ==========================================
   // 2. DOM Elements
@@ -93,6 +96,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const compareProgressBar = document.getElementById("compareProgressBar");
   const compareModalFooter = document.getElementById("compareModalFooter");
   const selectedToDeleteCount = document.getElementById("selectedToDeleteCount");
+  
+  // Slider Controls
+  const thresholdSlider = document.getElementById("thresholdSlider");
+  const thresholdVal = document.getElementById("thresholdVal");
   const selectedToDeleteSize = document.getElementById("selectedToDeleteSize");
   const deleteSelectedBtn = document.getElementById("deleteSelectedBtn");
   const analysisSummaryText = document.getElementById("analysisSummaryText");
@@ -125,6 +132,41 @@ document.addEventListener("DOMContentLoaded", () => {
       folderHistory = [{ id: config.rootFolderId, name: "根目錄" }];
       loadFolderContents(currentFolderId);
     }
+
+    // 綁定比對門檻拉桿事件
+    if (thresholdSlider) {
+      thresholdSlider.addEventListener("input", (e) => {
+        currentThreshold = parseInt(e.target.value);
+        updateThresholdDisplay();
+        
+        // 即時重新分組與渲染，不需重新從雲端下載！
+        if (calculatedHashes.length > 0) {
+          clusterDuplicates(calculatedHashes);
+        }
+      });
+    }
+  }
+
+  function updateThresholdDisplay() {
+    if (!thresholdVal) return;
+    const similarityPercent = Math.round(((64 - currentThreshold) / 64) * 100);
+    
+    let text = "";
+    if (currentThreshold <= 3) {
+      text = `極嚴格 (${similarityPercent}%) - 幾乎完全相同`;
+    } else if (currentThreshold <= 5) {
+      text = `嚴格 (${similarityPercent}%) - 極度相近`;
+    } else if (currentThreshold <= 7) {
+      text = `一般 (${similarityPercent}%) - 相同角度/裁切`;
+    } else if (currentThreshold <= 9) {
+      text = `中等 (${similarityPercent}%) - 稍有視角偏移/亮度差`;
+    } else if (currentThreshold <= 12) {
+      text = `寬鬆 (${similarityPercent}%) - 相同場景或物體`;
+    } else {
+      text = `超寬鬆 (${similarityPercent}%) - 構圖相似`;
+    }
+    
+    thresholdVal.textContent = text;
   }
 
   function showSetupGuide(show) {
@@ -648,6 +690,13 @@ document.addEventListener("DOMContentLoaded", () => {
     compareProgressText.textContent = "準備下載圖片特徵中...";
     compareProgressBar.style.width = "0%";
     
+    // 初始化拉桿狀態
+    if (thresholdSlider) {
+      thresholdSlider.value = currentThreshold;
+    }
+    updateThresholdDisplay();
+    calculatedHashes = [];
+    
     try {
       // 1. Calculate hashes for all files in the current folder
       const imagesWithHashes = [];
@@ -683,8 +732,10 @@ document.addEventListener("DOMContentLoaded", () => {
       compareProgressBar.style.width = "100%";
       compareProgressText.textContent = "比對指紋特徵中...";
       
+      calculatedHashes = imagesWithHashes;
+      
       // 2. Perform pairwise Hamming distance check and cluster duplicates
-      clusterDuplicates(imagesWithHashes);
+      clusterDuplicates(calculatedHashes);
       
     } catch (err) {
       alert("分析失敗: " + err.message);
@@ -777,11 +828,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     
     // Pairwise comparison
-    const maxHammingDistance = 5; // Roughly 92% similarity
     for (let i = 0; i < images.length; i++) {
       for (let j = i + 1; j < images.length; j++) {
         const dist = getHammingDistance(images[i].hash, images[j].hash);
-        if (dist <= maxHammingDistance) {
+        if (dist <= currentThreshold) {
           union(images[i].id, images[j].id);
         }
       }

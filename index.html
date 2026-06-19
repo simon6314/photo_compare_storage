@@ -89,6 +89,7 @@
             <!-- Dynamically populated e.g., Root / Subfolder -->
             <span class="breadcrumb-item active">載入中...</span>
           </div>
+          <div class="explorer-stats" id="explorerStats" style="display: none;"></div>
           
           <div class="explorer-buttons">
             <button class="btn btn-secondary-outline icon-text-btn" id="newFolderBtn" disabled>
@@ -181,6 +182,14 @@
             <input type="text" id="modalFolderId" required>
           </div>
           
+          <div class="form-group">
+            <label for="modalDownloadQuality">載入圖片品質 (下載速度優化)</label>
+            <select id="modalDownloadQuality" class="settings-select">
+              <option value="medium">流暢預覽 (約 40-50% 清晰度，推薦)</option>
+              <option value="original">完整原圖 (極清晰，但載入較慢)</option>
+            </select>
+          </div>
+          
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary" id="modalCancelBtn">取消</button>
             <button type="submit" class="btn btn-primary">儲存設定</button>
@@ -193,7 +202,14 @@
     <div class="modal-overlay lightbox-overlay" id="lightboxModal" aria-hidden="true">
       <div class="lightbox-content">
         <button class="lightbox-close-btn" id="lightboxCloseBtn" aria-label="關閉圖片">×</button>
-        <img class="lightbox-img" id="lightboxImage" src="" alt="圖片放大顯示">
+        <div class="lightbox-img-container" id="lightboxImageContainer">
+          <img class="lightbox-img" id="lightboxImage" src="" alt="圖片放大顯示">
+        </div>
+        <div class="lightbox-controls">
+          <button type="button" class="lightbox-ctrl-btn" id="zoomOutBtn" title="縮小">➖</button>
+          <button type="button" class="lightbox-ctrl-btn" id="zoomResetBtn" title="100% 重設">🔄</button>
+          <button type="button" class="lightbox-ctrl-btn" id="zoomInBtn" title="放大">➕</button>
+        </div>
         <div class="lightbox-caption" id="lightboxCaption">
           <span class="photo-name">Name.jpg</span>
           <span class="photo-details">1.2 MB | 2026/06/19</span>
@@ -233,9 +249,13 @@
           <div class="threshold-control-bar">
             <div class="threshold-slider-group">
               <label for="thresholdSlider" class="threshold-label">比對靈敏度: <span id="thresholdVal">中等 (88%)</span></label>
-              <input type="range" id="thresholdSlider" min="1" max="58" value="8" class="threshold-slider">
+              <div class="slider-button-wrapper">
+                <button type="button" class="btn-ctrl-slider" id="thresholdDecrease" title="降低數值 (更嚴格)">➖</button>
+                <input type="range" id="thresholdSlider" min="1" max="58" value="8" class="threshold-slider">
+                <button type="button" class="btn-ctrl-slider" id="thresholdIncrease" title="提高數值 (更寬鬆)">➕</button>
+              </div>
             </div>
-            <span class="threshold-hint">💡 提示：往右拖曳（數值變大）判定會更寬鬆，能找出拍射角度稍有偏差或亮度不同的相近照片。</span>
+            <span class="threshold-hint">💡 提示：往左拖曳或按「➖」（數值變小）判定會更嚴格，往右拖曳或按「➕」（數值變大）判定會更寬鬆，能找出拍攝角度稍有偏差或亮度不同的相近照片。</span>
           </div>
           
           <!-- Empty State (No duplicates found) -->

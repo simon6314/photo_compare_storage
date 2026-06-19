@@ -26,7 +26,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let config = {
     gasUrl: localStorage.getItem("pcs_gas_url") || parentGasUrl || "https://script.google.com/macros/s/AKfycbwdEc2oEcYV_EMiJg5tRC-kyKzCjuayaVDY9dcEIuhdW9WGKBn8peDaW4ESz6ul2Cytag/exec",
-    rootFolderId: localStorage.getItem("pcs_root_folder_id") || parentFolderId || "15toOQzCIVRBFd4x5C8Ao_2k1C-2yTMzA"
+    rootFolderId: localStorage.getItem("pcs_root_folder_id") || parentFolderId || "15toOQzCIVRBFd4x5C8Ao_2k1C-2yTMzA",
+    downloadQuality: localStorage.getItem("pcs_download_quality") || "medium"
   };
   
   let currentFolderId = config.rootFolderId;
@@ -75,14 +76,24 @@ document.addEventListener("DOMContentLoaded", () => {
   const settingsForm = document.getElementById("settingsForm");
   const modalGasUrl = document.getElementById("modalGasUrl");
   const modalFolderId = document.getElementById("modalFolderId");
+  const modalDownloadQuality = document.getElementById("modalDownloadQuality");
   const settingsModalCloseBtn = document.getElementById("settingsModalCloseBtn");
   const modalCancelBtn = document.getElementById("modalCancelBtn");
   
   // Lightbox Modal
   const lightboxModal = document.getElementById("lightboxModal");
+  const lightboxImageContainer = document.getElementById("lightboxImageContainer");
   const lightboxImage = document.getElementById("lightboxImage");
   const lightboxCaption = document.getElementById("lightboxCaption");
   const lightboxCloseBtn = document.getElementById("lightboxCloseBtn");
+  const zoomOutBtn = document.getElementById("zoomOutBtn");
+  const zoomResetBtn = document.getElementById("zoomResetBtn");
+  const zoomInBtn = document.getElementById("zoomInBtn");
+
+  // Threshold Control & Stats
+  const thresholdDecrease = document.getElementById("thresholdDecrease");
+  const thresholdIncrease = document.getElementById("thresholdIncrease");
+  const explorerStats = document.getElementById("explorerStats");
   
   // Duplicate Compare Modal
   const compareModal = document.getElementById("compareModal");
@@ -142,6 +153,34 @@ document.addEventListener("DOMContentLoaded", () => {
         // 即時重新分組與渲染，不需重新從雲端下載！
         if (calculatedHashes.length > 0) {
           clusterDuplicates(calculatedHashes);
+        }
+      });
+    }
+
+    // 綁定比對門檻按鈕事件
+    if (thresholdDecrease) {
+      thresholdDecrease.addEventListener("click", () => {
+        let val = parseInt(thresholdSlider.value);
+        if (val > parseInt(thresholdSlider.min || 1)) {
+          thresholdSlider.value = val - 1;
+          currentThreshold = val - 1;
+          updateThresholdDisplay();
+          if (calculatedHashes.length > 0) {
+            clusterDuplicates(calculatedHashes);
+          }
+        }
+      });
+    }
+    if (thresholdIncrease) {
+      thresholdIncrease.addEventListener("click", () => {
+        let val = parseInt(thresholdSlider.value);
+        if (val < parseInt(thresholdSlider.max || 58)) {
+          thresholdSlider.value = val + 1;
+          currentThreshold = val + 1;
+          updateThresholdDisplay();
+          if (calculatedHashes.length > 0) {
+            clusterDuplicates(calculatedHashes);
+          }
         }
       });
     }
@@ -286,6 +325,20 @@ document.addEventListener("DOMContentLoaded", () => {
     
     const hasFolders = foldersList.length > 0;
     const hasFiles = filesList.length > 0;
+    
+    // Update Stats Display
+    if (explorerStats) {
+      if (hasFolders || hasFiles) {
+        explorerStats.style.display = "inline-flex";
+        explorerStats.innerHTML = `
+          <span>📁 ${foldersList.length} 個資料夾</span>
+          <span class="stats-divider">•</span>
+          <span>🖼️ ${filesList.length} 張照片</span>
+        `;
+      } else {
+        explorerStats.style.display = "none";
+      }
+    }
     
     if (!hasFolders && !hasFiles) {
       explorerGrid.style.display = "none";
@@ -459,8 +512,41 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // ==========================================
-  // 7. Lightbox Preview
+  // 7. Lightbox Preview (Zoom & Pan Enhanced)
   // ==========================================
+  let zoomState = {
+    scale: 1,
+    x: 0,
+    y: 0,
+    isDragging: false,
+    startX: 0,
+    startY: 0
+  };
+
+  function resetZoom() {
+    zoomState.scale = 1;
+    zoomState.x = 0;
+    zoomState.y = 0;
+    applyZoom();
+  }
+
+  function applyZoom() {
+    if (zoomState.scale < 0.5) zoomState.scale = 0.5;
+    if (zoomState.scale > 5) zoomState.scale = 5;
+    
+    if (zoomState.scale === 1) {
+      zoomState.x = 0;
+      zoomState.y = 0;
+      if (lightboxImageContainer) lightboxImageContainer.classList.remove("zoomed");
+    } else {
+      if (lightboxImageContainer) lightboxImageContainer.classList.add("zoomed");
+    }
+    
+    if (lightboxImage) {
+      lightboxImage.style.transform = `translate(${zoomState.x}px, ${zoomState.y}px) scale(${zoomState.scale})`;
+    }
+  }
+
   function openLightbox(file) {
     lightboxImage.src = "";
     lightboxCaption.querySelector(".photo-name").textContent = file.name;
@@ -469,6 +555,8 @@ document.addEventListener("DOMContentLoaded", () => {
     lightboxModal.classList.add("open");
     lightboxModal.setAttribute("aria-hidden", "false");
     
+    resetZoom();
+    
     // Attempt loading temporary thumbnail preview first, then try fetching proxy content
     showSpinner(true, "下載中...");
     
@@ -476,6 +564,7 @@ document.addEventListener("DOMContentLoaded", () => {
       .then(url => {
         lightboxImage.src = url;
         showSpinner(false);
+        resetZoom();
       })
       .catch(err => {
         alert("無法載入大圖，請檢查連線：" + err.message);
@@ -487,6 +576,117 @@ document.addEventListener("DOMContentLoaded", () => {
   function closeLightbox() {
     lightboxModal.classList.remove("open");
     lightboxModal.setAttribute("aria-hidden", "true");
+    resetZoom();
+  }
+
+  // Register Zoom/Pan event listeners
+  if (lightboxImageContainer) {
+    // Click toggle zoom
+    lightboxImage.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (zoomState.scale > 1) {
+        resetZoom();
+      } else {
+        zoomState.scale = 2.0;
+        applyZoom();
+      }
+    });
+
+    // Mouse drag to pan
+    lightboxImageContainer.addEventListener("mousedown", (e) => {
+      if (zoomState.scale <= 1) return;
+      zoomState.isDragging = true;
+      zoomState.startX = e.clientX - zoomState.x;
+      zoomState.startY = e.clientY - zoomState.y;
+      e.preventDefault();
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (!zoomState.isDragging) return;
+      zoomState.x = e.clientX - zoomState.startX;
+      zoomState.y = e.clientY - zoomState.startY;
+      applyZoom();
+    });
+
+    window.addEventListener("mouseup", () => {
+      zoomState.isDragging = false;
+    });
+
+    // Scroll wheel zoom
+    lightboxImageContainer.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const zoomFactor = 0.1;
+      if (e.deltaY < 0) {
+        zoomState.scale += zoomFactor;
+      } else {
+        zoomState.scale -= zoomFactor;
+      }
+      applyZoom();
+    }, { passive: false });
+
+    // Touch support for mobile devices (Pan & Pinch-to-zoom)
+    let touchStartDist = 0;
+    
+    lightboxImageContainer.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 1) {
+        if (zoomState.scale <= 1) return;
+        zoomState.isDragging = true;
+        zoomState.startX = e.touches[0].clientX - zoomState.x;
+        zoomState.startY = e.touches[0].clientY - zoomState.y;
+      } else if (e.touches.length === 2) {
+        zoomState.isDragging = false;
+        touchStartDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+      }
+    });
+
+    lightboxImageContainer.addEventListener("touchmove", (e) => {
+      if (zoomState.isDragging && e.touches.length === 1) {
+        zoomState.x = e.touches[0].clientX - zoomState.startX;
+        zoomState.y = e.touches[0].clientY - zoomState.startY;
+        applyZoom();
+      } else if (e.touches.length === 2) {
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        if (touchStartDist > 0) {
+          const factor = dist / touchStartDist;
+          zoomState.scale *= factor;
+          touchStartDist = dist;
+          applyZoom();
+        }
+      }
+    }, { passive: true });
+
+    lightboxImageContainer.addEventListener("touchend", () => {
+      zoomState.isDragging = false;
+      touchStartDist = 0;
+    });
+  }
+
+  // Hook Zoom control buttons
+  if (zoomInBtn) {
+    zoomInBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      zoomState.scale += 0.25;
+      applyZoom();
+    });
+  }
+  if (zoomOutBtn) {
+    zoomOutBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      zoomState.scale -= 0.25;
+      applyZoom();
+    });
+  }
+  if (zoomResetBtn) {
+    zoomResetBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      resetZoom();
+    });
   }
 
   lightboxCloseBtn.addEventListener("click", closeLightbox);
@@ -500,8 +700,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // 8. Image Loading Helper (CORS & Base64 Proxy)
   // ==========================================
   async function loadImageForCanvas(fileId, thumbnailUrl) {
-    // 1. Try to download low-res thumbnail directly via browser cache/CORS if allowed
-    if (thumbnailUrl) {
+    // 1. Try to download low-res thumbnail directly via browser cache/CORS if allowed (only when quality is medium)
+    if (config.downloadQuality === "medium" && thumbnailUrl) {
       try {
         // Change thumbnail query to pull a larger preview size (up to =s800)
         let highResThumb = thumbnailUrl;
@@ -521,8 +721,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
     
-    // 2. Secure Fallback: Fetch original bytes from user's GAS Web App and convert to local Blob URL
-    const res = await callGAS({ action: "download", fileId: fileId });
+    // 2. Secure Fallback / Original Quality: Fetch bytes from user's GAS Web App and convert to local Blob URL
+    const res = await callGAS({ action: "download", fileId: fileId, quality: config.downloadQuality });
     if (res.success && res.base64Data) {
       const byteCharacters = atob(res.base64Data);
       const byteNumbers = new Array(byteCharacters.length);
@@ -1125,6 +1325,9 @@ document.addEventListener("DOMContentLoaded", () => {
   settingsToggleBtn.addEventListener("click", () => {
     modalGasUrl.value = config.gasUrl;
     modalFolderId.value = config.rootFolderId;
+    if (modalDownloadQuality) {
+      modalDownloadQuality.value = config.downloadQuality || "medium";
+    }
     
     settingsModal.classList.add("open");
     settingsModal.setAttribute("aria-hidden", "false");
@@ -1146,22 +1349,25 @@ document.addEventListener("DOMContentLoaded", () => {
   // Settings Save (First time)
   firstTimeSetupForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    saveConfiguration(gasUrlInput.value.trim(), folderIdInput.value.trim());
+    saveConfiguration(gasUrlInput.value.trim(), folderIdInput.value.trim(), "medium");
   });
 
   // Settings Save (Modal)
   settingsForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    saveConfiguration(modalGasUrl.value.trim(), modalFolderId.value.trim());
+    const quality = modalDownloadQuality ? modalDownloadQuality.value : "medium";
+    saveConfiguration(modalGasUrl.value.trim(), modalFolderId.value.trim(), quality);
     closeSettingsModal();
   });
 
-  function saveConfiguration(url, folderId) {
+  function saveConfiguration(url, folderId, quality) {
     config.gasUrl = url;
     config.rootFolderId = folderId;
+    config.downloadQuality = quality || "medium";
     
     localStorage.setItem("pcs_gas_url", url);
     localStorage.setItem("pcs_root_folder_id", folderId);
+    localStorage.setItem("pcs_download_quality", config.downloadQuality);
     
     showSetupGuide(false);
     currentFolderId = folderId;

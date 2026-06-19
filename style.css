@@ -1360,3 +1360,177 @@ body {
   line-height: 1.4;
 }
 
+/* Explorer Stats Badge */
+.explorer-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  background-color: var(--border-color);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+body.theme-light .explorer-stats {
+  background-color: rgba(15, 23, 42, 0.05);
+}
+
+.explorer-stats .stats-divider {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+/* Slider Adjustment Buttons */
+.slider-button-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.btn-ctrl-slider {
+  background-color: var(--border-color);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  font-size: 0.85rem;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.btn-ctrl-slider:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--text-muted);
+  transform: scale(1.1);
+}
+
+.btn-ctrl-slider:active {
+  transform: scale(0.9);
+}
+
+body.theme-light .btn-ctrl-slider {
+  background-color: rgba(15, 23, 42, 0.05);
+}
+
+/* Lightbox Zoom & Pan Enhancement */
+.lightbox-img-container {
+  max-width: 90vw;
+  max-height: 65vh;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  position: relative;
+  cursor: zoom-in;
+  background-color: rgba(0, 0, 0, 0.2);
+  touch-action: none; /* Prevent browser defaults on drag/pinch */
+}
+
+.lightbox-img {
+  max-width: 100%;
+  max-height: 65vh;
+  object-fit: contain;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: center center;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* When zoomed, change cursors */
+.lightbox-img-container.zoomed {
+  cursor: grab;
+}
+
+.lightbox-img-container.zoomed:active {
+  cursor: grabbing;
+}
+
+.lightbox-controls {
+  display: flex;
+  gap: 12px;
+  background-color: var(--bg-glass);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  margin-top: 4px;
+  z-index: 10;
+  box-shadow: var(--shadow-card);
+}
+
+.lightbox-ctrl-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.lightbox-ctrl-btn:hover {
+  background-color: var(--border-color);
+  transform: scale(1.15);
+}
+
+.lightbox-ctrl-btn:active {
+  transform: scale(0.9);
+}
+
+/* Select fields style */
+.form-group select.settings-select {
+  height: 44px;
+  background-color: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0 14px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-family: var(--font-sans);
+  transition: var(--transition-smooth);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M7 10l5 5 5-5H7z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 18px;
+  padding-right: 40px;
+}
+
+body.theme-light .form-group select.settings-select {
+  background-color: rgba(15, 23, 42, 0.03);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23475569'%3E%3Cpath d='M7 10l5 5 5-5H7z'/%3E%3C/svg%3E");
+}
+
+.form-group select.settings-select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+}
+
+/* Style select options in dark theme */
+.form-group select.settings-select option {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+

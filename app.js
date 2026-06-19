@@ -715,7 +715,7 @@ document.addEventListener("DOMContentLoaded", () => {
           // Download and load into image object
           const url = await loadImageForCanvas(file.id, file.thumbnailUrl);
           const img = await loadImageObject(url);
-          const hash = await computeDHash(img);
+          const { hash, avgRGB } = await computeDHashAndColor(img);
           
           imagesWithHashes.push({
             id: file.id,
@@ -723,6 +723,7 @@ document.addEventListener("DOMContentLoaded", () => {
             size: file.size,
             thumbnailUrl: file.thumbnailUrl,
             hash: hash,
+            avgRGB: avgRGB,
             createdAt: file.createdAt,
             imgSrc: url, // Cached object URL to draw on compare cards
             width: img.naturalWidth,
@@ -757,10 +758,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /**
-   * Computes Difference Hash (dHash) for an Image
-   * Resize to 9x8, grayscale, compare adjacent pixels horizontally -> 64 bits binary hash
+   * Computes Difference Hash (dHash) and Average RGB for an Image
    */
-  function computeDHash(img) {
+  function computeDHashAndColor(img) {
     return new Promise((resolve) => {
       const width = 9;
       const height = 8;
@@ -776,15 +776,30 @@ document.addEventListener("DOMContentLoaded", () => {
       const imgData = ctx.getImageData(0, 0, width, height);
       const data = imgData.data;
       
+      // Calculate Average RGB
+      let sumR = 0, sumG = 0, sumB = 0;
+      const pixelCount = width * height;
+      
       // Convert to Grayscale
-      const gray = new Uint8Array(width * height);
+      const gray = new Uint8Array(pixelCount);
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
+        
+        sumR += r;
+        sumG += g;
+        sumB += b;
+        
         // Standard luminance weights
         gray[i / 4] = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
       }
+      
+      const avgRGB = {
+        r: Math.round(sumR / pixelCount),
+        g: Math.round(sumG / pixelCount),
+        b: Math.round(sumB / pixelCount)
+      };
       
       // Compare horizontal adjacent pixels
       let hash = "";
@@ -796,8 +811,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
       
-      resolve(hash);
+      resolve({ hash, avgRGB });
     });
+  }
+
+  function getColorDistance(rgb1, rgb2) {
+    return Math.abs(rgb1.r - rgb2.r) + Math.abs(rgb1.g - rgb2.g) + Math.abs(rgb1.b - rgb2.b);
   }
 
   function getHammingDistance(hash1, hash2) {
@@ -835,7 +854,10 @@ document.addEventListener("DOMContentLoaded", () => {
     for (let i = 0; i < images.length; i++) {
       for (let j = i + 1; j < images.length; j++) {
         const dist = getHammingDistance(images[i].hash, images[j].hash);
-        if (dist <= currentThreshold) {
+        const colorDist = getColorDistance(images[i].avgRGB, images[j].avgRGB);
+        
+        // 混合分析法：結構相似 (漢明距離符合拉桿) 且 色調相似 (RGB 平均差 <= 60)，才判定為重複！
+        if (dist <= currentThreshold && colorDist <= 60) {
           union(images[i].id, images[j].id);
         }
       }

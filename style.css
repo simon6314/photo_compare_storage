@@ -1542,7 +1542,7 @@ body.theme-light .form-group select.settings-select {
    ==================================================================== */
 
 .lightbox-img.is-blurred {
-  filter: blur(20px);
+  filter: blur(4px);
   transition: filter 0.4s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 

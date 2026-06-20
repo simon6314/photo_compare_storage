@@ -95,7 +95,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const zoomInBtn = document.getElementById("zoomInBtn");
   const lightboxPrevBtn = document.getElementById("lightboxPrevBtn");
   const lightboxNextBtn = document.getElementById("lightboxNextBtn");
-  const lightboxLoader = document.getElementById("lightboxLoader");
 
   // Threshold Control & Stats
   const thresholdDecrease = document.getElementById("thresholdDecrease");
@@ -554,11 +553,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function showLightboxLoader(show) {
-    if (lightboxLoader) {
-      lightboxLoader.style.display = show ? "flex" : "none";
-    }
-  }
 
   function updateLightboxNavButtons() {
     if (!lightboxPrevBtn || !lightboxNextBtn) return;
@@ -603,21 +597,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (file.imgSrc) {
       lightboxImage.src = file.imgSrc;
       lightboxImage.classList.remove("is-blurred");
-      showLightboxLoader(false);
       return;
     }
     
     // 2. Otherwise, load it in the background while displaying blurred thumbnail instantly
-    let previewSrc = file.thumbnailUrl || 'placeholder.jpg';
-    if (previewSrc.includes("=s") && !previewSrc.includes("=s400")) {
-      previewSrc = previewSrc.replace(/=s\d+/, "=s400"); // 400px is perfect for blur
-    } else if (previewSrc !== 'placeholder.jpg' && !previewSrc.includes("=s")) {
-      previewSrc += "=s400";
-    }
-    
-    lightboxImage.src = previewSrc;
+    // Directly use file.thumbnailUrl which is already loaded & cached by browser grid preview
+    lightboxImage.src = file.thumbnailUrl || 'placeholder.jpg';
     lightboxImage.classList.add("is-blurred");
-    showLightboxLoader(true);
     
     loadImageForCanvas(file.id, file.thumbnailUrl)
       .then(url => {
@@ -629,7 +615,6 @@ document.addEventListener("DOMContentLoaded", () => {
           if (lightboxModal.classList.contains("open") && currentFileId === file.id) {
             lightboxImage.src = url;
             lightboxImage.classList.remove("is-blurred");
-            showLightboxLoader(false);
           }
         };
         tempImg.src = url;
@@ -637,7 +622,6 @@ document.addEventListener("DOMContentLoaded", () => {
       .catch(err => {
         console.warn("無法下載大圖，保留模糊預覽：" + err.message);
         if (currentFileId === file.id) {
-          showLightboxLoader(false);
           lightboxImage.classList.remove("is-blurred");
         }
       });
@@ -874,6 +858,12 @@ document.addEventListener("DOMContentLoaded", () => {
         let highResThumb = thumbnailUrl;
         if (highResThumb.includes("=s")) {
           highResThumb = highResThumb.replace(/=s\d+/, "=s800");
+        } else if (highResThumb.includes("drive.google.com/thumbnail")) {
+          if (highResThumb.includes("sz=")) {
+            highResThumb = highResThumb.replace(/sz=\w+/, "sz=w1000");
+          } else {
+            highResThumb += "&sz=w1000";
+          }
         } else {
           highResThumb += "=s800";
         }

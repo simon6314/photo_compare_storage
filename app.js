@@ -902,37 +902,55 @@ document.addEventListener("DOMContentLoaded", () => {
     calculatedHashes = [];
     
     try {
-      // 1. Calculate hashes for all files in the current folder
+      // 1. Calculate hashes for all files in the current folder (並行下載與計算)
       const imagesWithHashes = [];
       const totalFiles = filesList.length;
+      let completedCount = 0;
+      const concurrencyLimit = 4; // 限制最多 4 個並行下載，避免瀏覽器連接上限或 API 限流
       
-      for (let i = 0; i < totalFiles; i++) {
-        const file = filesList[i];
-        compareProgressText.textContent = `讀取圖片中 (${i + 1} / ${totalFiles}): ${file.name}`;
-        compareProgressBar.style.width = `${Math.round(((i) / totalFiles) * 100)}%`;
-        
-        try {
-          // Download and load into image object
-          const url = await loadImageForCanvas(file.id, file.thumbnailUrl);
-          const img = await loadImageObject(url);
-          const { hash, avgRGB } = await computePHashAndColor(img);
+      let currentIndex = 0;
+      
+      async function worker() {
+        while (currentIndex < totalFiles) {
+          const index = currentIndex++;
+          if (index >= totalFiles) break;
+          const file = filesList[index];
           
-          imagesWithHashes.push({
-            id: file.id,
-            name: file.name,
-            size: file.size,
-            thumbnailUrl: file.thumbnailUrl,
-            hash: hash,
-            avgRGB: avgRGB,
-            createdAt: file.createdAt,
-            imgSrc: url, // Cached object URL to draw on compare cards
-            width: img.naturalWidth,
-            height: img.naturalHeight
-          });
-        } catch (fileErr) {
-          console.warn(`跳過毀損或無法讀取的圖片 「${file.name}」:`, fileErr);
+          try {
+            compareProgressText.textContent = `讀取圖片中 (${completedCount + 1} / ${totalFiles}): ${file.name}`;
+            
+            const url = await loadImageForCanvas(file.id, file.thumbnailUrl);
+            const img = await loadImageObject(url);
+            const { hash, avgRGB } = await computePHashAndColor(img);
+            
+            imagesWithHashes.push({
+              id: file.id,
+              name: file.name,
+              size: file.size,
+              thumbnailUrl: file.thumbnailUrl,
+              hash: hash,
+              avgRGB: avgRGB,
+              createdAt: file.createdAt,
+              imgSrc: url,
+              width: img.naturalWidth,
+              height: img.naturalHeight
+            });
+          } catch (fileErr) {
+            console.warn(`跳過毀損或無法讀取的圖片 「${file.name}」:`, fileErr);
+          } finally {
+            completedCount++;
+            compareProgressText.textContent = `計算特徵中 (${completedCount} / ${totalFiles})`;
+            compareProgressBar.style.width = `${Math.round((completedCount / totalFiles) * 100)}%`;
+          }
         }
       }
+      
+      // 啟動多個並行 Worker
+      const workers = [];
+      for (let w = 0; w < Math.min(concurrencyLimit, totalFiles); w++) {
+        workers.push(worker());
+      }
+      await Promise.all(workers);
       
       compareProgressBar.style.width = "100%";
       compareProgressText.textContent = "比對指紋特徵中...";

@@ -34,6 +34,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentFolderName = "根目錄";
   let folderHistory = []; // Stack of { id, name }
   
+  let lightboxPlaylist = [];
+  let lightboxCurrentIndex = -1;
+  let currentFileId = "";
+  
   let foldersList = [];
   let filesList = [];
   let similarityGroups = []; // Array of groups: { id, keepFile, deleteFiles: [] }
@@ -89,6 +93,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const zoomOutBtn = document.getElementById("zoomOutBtn");
   const zoomResetBtn = document.getElementById("zoomResetBtn");
   const zoomInBtn = document.getElementById("zoomInBtn");
+  const lightboxPrevBtn = document.getElementById("lightboxPrevBtn");
+  const lightboxNextBtn = document.getElementById("lightboxNextBtn");
+  const lightboxLoader = document.getElementById("lightboxLoader");
 
   // Threshold Control & Stats
   const thresholdDecrease = document.getElementById("thresholdDecrease");
@@ -547,8 +554,42 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function openLightbox(file) {
-    lightboxImage.src = "";
+  function showLightboxLoader(show) {
+    if (lightboxLoader) {
+      lightboxLoader.style.display = show ? "flex" : "none";
+    }
+  }
+
+  function updateLightboxNavButtons() {
+    if (!lightboxPrevBtn || !lightboxNextBtn) return;
+    if (!lightboxPlaylist || lightboxPlaylist.length <= 1) {
+      lightboxPrevBtn.style.display = "none";
+      lightboxNextBtn.style.display = "none";
+      return;
+    }
+    lightboxPrevBtn.style.display = "flex";
+    lightboxNextBtn.style.display = "flex";
+    lightboxPrevBtn.disabled = lightboxCurrentIndex <= 0;
+    lightboxNextBtn.disabled = lightboxCurrentIndex >= lightboxPlaylist.length - 1;
+  }
+
+  function navigateLightbox(direction) {
+    if (!lightboxPlaylist || lightboxPlaylist.length === 0) return;
+    const newIndex = lightboxCurrentIndex + direction;
+    if (newIndex >= 0 && newIndex < lightboxPlaylist.length) {
+      const file = lightboxPlaylist[newIndex];
+      openLightbox(file, lightboxPlaylist);
+    }
+  }
+
+  function openLightbox(file, playlist = filesList) {
+    lightboxPlaylist = playlist;
+    lightboxCurrentIndex = playlist.findIndex(item => item.id === file.id);
+    currentFileId = file.id;
+    
+    // Ensure clean style transitions
+    lightboxImage.style.transition = "filter 0.4s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)";
+    
     lightboxCaption.querySelector(".photo-name").textContent = file.name;
     lightboxCaption.querySelector(".photo-details").textContent = `${formatBytes(file.size)} | 建立於 ${new Date(file.createdAt).toLocaleDateString()}`;
     
@@ -556,26 +597,56 @@ document.addEventListener("DOMContentLoaded", () => {
     lightboxModal.setAttribute("aria-hidden", "false");
     
     resetZoom();
+    updateLightboxNavButtons();
     
-    // Attempt loading temporary thumbnail preview first, then try fetching proxy content
-    showSpinner(true, "下載中...");
+    // 1. If we already have the downloaded high-res/medium image URL (cached)
+    if (file.imgSrc) {
+      lightboxImage.src = file.imgSrc;
+      lightboxImage.classList.remove("is-blurred");
+      showLightboxLoader(false);
+      return;
+    }
+    
+    // 2. Otherwise, load it in the background while displaying blurred thumbnail instantly
+    let previewSrc = file.thumbnailUrl || 'placeholder.jpg';
+    if (previewSrc.includes("=s") && !previewSrc.includes("=s400")) {
+      previewSrc = previewSrc.replace(/=s\d+/, "=s400"); // 400px is perfect for blur
+    } else if (previewSrc !== 'placeholder.jpg' && !previewSrc.includes("=s")) {
+      previewSrc += "=s400";
+    }
+    
+    lightboxImage.src = previewSrc;
+    lightboxImage.classList.add("is-blurred");
+    showLightboxLoader(true);
     
     loadImageForCanvas(file.id, file.thumbnailUrl)
       .then(url => {
-        lightboxImage.src = url;
-        showSpinner(false);
-        resetZoom();
+        file.imgSrc = url; // cache it
+        
+        // Preload in hidden image to avoid white flashing
+        const tempImg = new Image();
+        tempImg.onload = () => {
+          if (lightboxModal.classList.contains("open") && currentFileId === file.id) {
+            lightboxImage.src = url;
+            lightboxImage.classList.remove("is-blurred");
+            showLightboxLoader(false);
+          }
+        };
+        tempImg.src = url;
       })
       .catch(err => {
-        alert("無法載入大圖，請檢查連線：" + err.message);
-        showSpinner(false);
-        closeLightbox();
+        console.warn("無法下載大圖，保留模糊預覽：" + err.message);
+        if (currentFileId === file.id) {
+          showLightboxLoader(false);
+          lightboxImage.classList.remove("is-blurred");
+        }
       });
   }
 
   function closeLightbox() {
     lightboxModal.classList.remove("open");
     lightboxModal.setAttribute("aria-hidden", "true");
+    currentFileId = "";
     resetZoom();
   }
 
@@ -624,47 +695,112 @@ document.addEventListener("DOMContentLoaded", () => {
       applyZoom();
     }, { passive: false });
 
-    // Touch support for mobile devices (Pan & Pinch-to-zoom)
+    // Touch support for mobile devices (Pan, Pinch-to-zoom & Swipe Navigation)
     let touchStartDist = 0;
+    let swipeStartX = 0;
+    let swipeStartY = 0;
+    let swipeStartTime = 0;
+    let isSwiping = false;
     
     lightboxImageContainer.addEventListener("touchstart", (e) => {
       if (e.touches.length === 1) {
-        if (zoomState.scale <= 1) return;
-        zoomState.isDragging = true;
-        zoomState.startX = e.touches[0].clientX - zoomState.x;
-        zoomState.startY = e.touches[0].clientY - zoomState.y;
+        if (zoomState.scale > 1) {
+          zoomState.isDragging = true;
+          zoomState.startX = e.touches[0].clientX - zoomState.x;
+          zoomState.startY = e.touches[0].clientY - zoomState.y;
+          isSwiping = false;
+        } else {
+          zoomState.isDragging = false;
+          isSwiping = true;
+          swipeStartX = e.touches[0].clientX;
+          swipeStartY = e.touches[0].clientY;
+          swipeStartTime = Date.now();
+        }
       } else if (e.touches.length === 2) {
         zoomState.isDragging = false;
+        isSwiping = false;
         touchStartDist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
         );
       }
-    });
+    }, { passive: true });
 
     lightboxImageContainer.addEventListener("touchmove", (e) => {
-      if (zoomState.isDragging && e.touches.length === 1) {
-        zoomState.x = e.touches[0].clientX - zoomState.startX;
-        zoomState.y = e.touches[0].clientY - zoomState.startY;
-        applyZoom();
-      } else if (e.touches.length === 2) {
+      if (e.touches.length === 1) {
+        if (zoomState.isDragging && zoomState.scale > 1) {
+          zoomState.x = e.touches[0].clientX - zoomState.startX;
+          zoomState.y = e.touches[0].clientY - zoomState.startY;
+          applyZoom();
+        } else if (isSwiping) {
+          const deltaX = e.touches[0].clientX - swipeStartX;
+          const deltaY = e.touches[0].clientY - swipeStartY;
+          
+          if (Math.abs(deltaX) > Math.abs(deltaY)) {
+            lightboxImage.style.transition = "none";
+            lightboxImage.style.transform = `translateX(${deltaX}px)`;
+          }
+        }
+      } else if (e.touches.length === 2 && touchStartDist > 0) {
         const dist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
         );
-        if (touchStartDist > 0) {
-          const factor = dist / touchStartDist;
-          zoomState.scale *= factor;
-          touchStartDist = dist;
-          applyZoom();
-        }
+        const factor = dist / touchStartDist;
+        zoomState.scale *= factor;
+        touchStartDist = dist;
+        applyZoom();
       }
     }, { passive: true });
 
-    lightboxImageContainer.addEventListener("touchend", () => {
-      zoomState.isDragging = false;
+    lightboxImageContainer.addEventListener("touchend", (e) => {
+      if (zoomState.isDragging) {
+        zoomState.isDragging = false;
+      }
+      
+      if (isSwiping) {
+        isSwiping = false;
+        const deltaX = e.changedTouches[0].clientX - swipeStartX;
+        const deltaY = e.changedTouches[0].clientY - swipeStartY;
+        const deltaTime = Date.now() - swipeStartTime;
+        
+        if (Math.abs(deltaX) > 60 && Math.abs(deltaY) < 80 && deltaTime < 350) {
+          if (deltaX > 0) {
+            if (lightboxCurrentIndex > 0) {
+              lightboxImage.style.transition = "transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1)";
+              lightboxImage.style.transform = "translateX(100%)";
+              setTimeout(() => {
+                navigateLightbox(-1);
+              }, 200);
+            } else {
+              resetSwipeAnimation();
+            }
+          } else {
+            if (lightboxCurrentIndex < lightboxPlaylist.length - 1) {
+              lightboxImage.style.transition = "transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1)";
+              lightboxImage.style.transform = "translateX(-100%)";
+              setTimeout(() => {
+                navigateLightbox(1);
+              }, 200);
+            } else {
+              resetSwipeAnimation();
+            }
+          }
+        } else {
+          resetSwipeAnimation();
+        }
+      }
+      
       touchStartDist = 0;
     });
+
+    function resetSwipeAnimation() {
+      lightboxImage.style.transition = "transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), filter 0.4s ease";
+      lightboxImage.style.transform = "translateX(0px)";
+      setTimeout(() => {
+        lightboxImage.style.transition = "transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)";
+      }, 350);
+    }
   }
 
   // Hook Zoom control buttons
@@ -692,6 +828,37 @@ document.addEventListener("DOMContentLoaded", () => {
   lightboxCloseBtn.addEventListener("click", closeLightbox);
   lightboxModal.addEventListener("click", (e) => {
     if (e.target === lightboxModal || e.target.closest(".lightbox-close-btn")) {
+      closeLightbox();
+    }
+  });
+
+  // Lightbox Navigation Controls (Click Handlers)
+  if (lightboxPrevBtn) {
+    lightboxPrevBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      navigateLightbox(-1);
+    });
+  }
+
+  if (lightboxNextBtn) {
+    lightboxNextBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      navigateLightbox(1);
+    });
+  }
+
+  // Keyboard navigation when lightbox is open
+  window.addEventListener("keydown", (e) => {
+    if (!lightboxModal.classList.contains("open")) return;
+    
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      navigateLightbox(-1);
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      navigateLightbox(1);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
       closeLightbox();
     }
   });
@@ -1247,6 +1414,16 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         `;
         
+        // Click to enlarge thumbnail in compare results
+        const previewContainer = photoItem.querySelector(".compare-photo-preview");
+        previewContainer.style.cursor = "zoom-in";
+        previewContainer.addEventListener("click", (e) => {
+          if (e.target.closest(".compare-select-overlay") || e.target.closest(".compare-checkbox-custom")) {
+            return;
+          }
+          openLightbox(file, allFiles);
+        });
+
         // Checkbox toggle logic
         if (!isOriginal) {
           const checkbox = photoItem.querySelector(".compare-checkbox");

@@ -1382,18 +1382,16 @@ document.addEventListener("DOMContentLoaded", () => {
             <img class="compare-photo-img" src="${file.imgSrc}" alt="${file.name}">
             
             ${isOriginal 
-              ? `<span class="keep-badge">保留主要</span>` 
+              ? `<span class="keep-badge" id="badge-${file.id}">保留主要</span>` 
               : `<span class="delete-badge" id="badge-${file.id}">刪除重複</span>`
             }
             
-            ${!isOriginal ? `
-              <div class="compare-select-overlay">
-                <label class="compare-checkbox-custom">
-                  <input type="checkbox" class="compare-checkbox" data-id="${file.id}" ${selectedDeleteIds.has(file.id) ? 'checked' : ''}>
-                  <span class="checkbox-icon">✓</span>
-                </label>
-              </div>
-            ` : ''}
+            <div class="compare-select-overlay">
+              <label class="compare-checkbox-custom">
+                <input type="checkbox" class="compare-checkbox" data-id="${file.id}" ${selectedDeleteIds.has(file.id) ? 'checked' : ''}>
+                <span class="checkbox-icon">✓</span>
+              </label>
+            </div>
           </div>
           <div class="compare-photo-info">
             <span class="compare-photo-name" title="${file.name}">${file.name}</span>
@@ -1415,27 +1413,25 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         // Checkbox toggle logic
-        if (!isOriginal) {
-          const checkbox = photoItem.querySelector(".compare-checkbox");
-          checkbox.addEventListener("change", (e) => {
-            const isChecked = e.target.checked;
-            const badge = photoItem.querySelector(`#badge-${file.id}`);
-            
-            if (isChecked) {
-              selectedDeleteIds.add(file.id);
-              photoItem.classList.replace("is-keep", "is-delete");
-              badge.className = "delete-badge";
-              badge.textContent = "刪除重複";
-            } else {
-              selectedDeleteIds.delete(file.id);
-              photoItem.classList.replace("is-delete", "is-keep");
-              badge.className = "keep-badge";
-              badge.textContent = "手動保留";
-            }
-            
-            updateCompareStats();
-          });
-        }
+        const checkbox = photoItem.querySelector(".compare-checkbox");
+        checkbox.addEventListener("change", (e) => {
+          const isChecked = e.target.checked;
+          const badge = photoItem.querySelector(`#badge-${file.id}`);
+          
+          if (isChecked) {
+            selectedDeleteIds.add(file.id);
+            photoItem.classList.replace("is-keep", "is-delete");
+            badge.className = "delete-badge";
+            badge.textContent = isOriginal ? "刪除主要" : "刪除重複";
+          } else {
+            selectedDeleteIds.delete(file.id);
+            photoItem.classList.replace("is-delete", "is-keep");
+            badge.className = "keep-badge";
+            badge.textContent = isOriginal ? "保留主要" : "手動保留";
+          }
+          
+          updateCompareStats();
+        });
         
         layoutContainer.appendChild(photoItem);
       });
@@ -1452,7 +1448,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // Sum size
     let sumSize = 0;
     similarityGroups.forEach(g => {
-      g.deleteFiles.forEach(file => {
+      const allFiles = [g.keepFile, ...g.deleteFiles];
+      allFiles.forEach(file => {
         if (selectedDeleteIds.has(file.id)) {
           sumSize += file.size;
         }

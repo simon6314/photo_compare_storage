@@ -1652,4 +1652,9 @@ body.theme-light .lightbox-nav-btn:hover {
   }
 }
 
+/* Ensure Lightbox Modal is overlaying comparison dashboard and other modals */
+.lightbox-overlay {
+  z-index: 250;
+}
+
 
